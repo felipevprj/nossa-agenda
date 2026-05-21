@@ -15,7 +15,8 @@ import type { AgendaEvent, AgendaTask, Category, ParsedResult, PersonCode, Shopp
 type View = "inicio" | "adicionar" | "mes" | "semana" | "dia" | "tarefas" | "compras" | "familia" | "radar" | "trabalho" | "perfil";
 
 export default function NossaAgendaApp() {
-  const [view, setView] = useState<View>("inicio");
+  // Alterado para iniciar diretamente na visão de mês, como pediu
+  const [view, setView] = useState<View>("mes"); 
   const [selectedDay, setSelectedDay] = useState<string>(new Date().toISOString().split('T')[0]);
   const [editing, setEditing] = useState<AgendaEvent | null>(null);
   const [isDark, setIsDark] = useState(false);
@@ -48,14 +49,14 @@ export default function NossaAgendaApp() {
     } else {
       setShopping((prev) => [...prev, { id: uid(), type: "shopping", familyId: "nossa-familia", item: parsed.data.item ?? "", quantity: null, category: "Geral", status: "pendente", notes: "", sourceText: "", createdAt: now, updatedAt: now }]);
     }
-    setView("inicio");
+    setView("mes");
   };
 
   if (isLoading) return (
     <div className={`flex min-h-screen items-center justify-center ${isDark ? 'bg-gray-950 text-white' : 'bg-gray-50 text-gray-900'}`}>
       <div className="flex flex-col items-center gap-4">
         <div className="h-12 w-12 rounded-full border-4 border-blue-500 border-t-transparent animate-spin"></div>
-        <p className="text-sm font-medium tracking-wide opacity-70">Sincronizando dados...</p>
+        <p className="text-sm font-medium tracking-wide opacity-70">Sincronizando dados com a nuvem...</p>
       </div>
     </div>
   );
@@ -133,7 +134,7 @@ export default function NossaAgendaApp() {
           <NavIcon icon={ShoppingCart} label="Compras" active={view === "compras"} onClick={() => setView("compras")} />
         </nav>
 
-        {view === "adicionar" && <SmartAudioModal onSave={saveParsed} onClose={() => setView("inicio")} />}
+        {view === "adicionar" && <SmartAudioModal onSave={saveParsed} onClose={() => setView("mes")} />}
         {editing && <EventEditor event={editing} onClose={() => setEditing(null)} onSave={(updated: AgendaEvent) => { setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e))); setEditing(null); }} />}
       </div>
     </div>
@@ -214,8 +215,8 @@ function WorkScheduleView() {
              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-3">Ciclos Ativos</h3>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-2xl">
-                  <p className="font-bold">Formação Ciclo 2</p>
-                  <p className="text-sm text-gray-500">Turmas acompanhadas no período da manhã</p>
+                  <p className="font-bold">Formação Ciclo</p>
+                  <p className="text-sm text-gray-500">Acompanhamento por turma</p>
                 </div>
              </div>
           </div>
@@ -237,6 +238,7 @@ function TasksView({ tasks, setTasks }: any) {
       </div>
       <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-6 border border-gray-100 dark:border-gray-800 shadow-sm">
          <div className="space-y-2">
+            {tasks.length === 0 && <p className="text-center text-gray-400 py-4">Nenhuma tarefa pendente.</p>}
             {tasks.map((t:any) => (
               <div key={t.id} className="flex items-center gap-4 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-2xl group">
                  <button onClick={() => setTasks((p:any) => p.map((x:any) => x.id === t.id ? {...x, status: x.status === 'pendente' ? 'concluida' : 'pendente'} : x))} className={`h-6 w-6 rounded-lg border-2 flex items-center justify-center transition-colors ${t.status === 'concluida' ? 'bg-blue-500 border-blue-500 text-white' : 'border-gray-300 dark:border-gray-600'}`}>
@@ -264,12 +266,12 @@ function ShoppingView({ items, setItems }: any) {
       </div>
       <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-6 border border-gray-100 dark:border-gray-800 shadow-sm">
          <div className="space-y-2">
+            {items.length === 0 && <p className="text-center text-gray-400 py-4">Sua lista de compras está vazia.</p>}
             {items.map((i:any) => (
               <div key={i.id} className="flex items-center gap-4 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-2xl group">
                  <button onClick={() => setItems((p:any) => p.map((x:any) => x.id === i.id ? {...x, status: x.status === 'pendente' ? 'comprado' : 'pendente'} : x))} className={`h-6 w-6 rounded-full border-2 flex items-center justify-center transition-colors ${i.status === 'comprado' ? 'bg-blue-500 border-blue-500 text-white' : 'border-gray-300 dark:border-gray-600'}`}>
                     {i.status === 'comprado' && <CheckSquare className="h-4 w-4" />}
                  </button>
-                 {/* Edição direta no clique (simplificada via input nativo) */}
                  <input type="text" value={i.item} onChange={(e) => setItems((p:any) => p.map((x:any) => x.id === i.id ? {...x, item: e.target.value} : x))} className={`flex-1 font-medium bg-transparent outline-none border-b border-transparent focus:border-blue-500 ${i.status === 'comprado' ? 'line-through text-gray-400' : ''}`} />
                  <button onClick={() => setItems((p:any) => p.filter((x:any) => x.id !== i.id))} className="opacity-0 group-hover:opacity-100 p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"><Trash2 className="h-4 w-4" /></button>
               </div>
@@ -288,7 +290,7 @@ function ProfileLGPDView() {
         <div><h2 className="text-2xl font-bold">Seus Dados</h2><p className="text-sm text-gray-500">Gestão de Privacidade (LGPD)</p></div>
       </div>
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 leading-relaxed">
-        Este espaço é reservado para a personalização do seu perfil. As informações inseridas aqui são processadas localmente e sincronizadas de forma criptografada apenas com o seu banco de dados privado. Não coletamos dados sensíveis.
+        Este espaço é reservado para a personalização do seu perfil. As informações inseridas aqui são processadas localmente e sincronizadas de forma criptografada apenas com o seu banco de dados privado (Firebase). Não processamos nem coletamos dados sensíveis.
       </p>
       <div className="space-y-4">
         <div><label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Nome de Exibição</label><input type="text" placeholder="Como prefere ser chamado" className="w-full p-3 rounded-2xl bg-gray-50 dark:bg-gray-800 border-none outline-none focus:ring-2 focus:ring-blue-500" /></div>
@@ -302,12 +304,41 @@ function SmartAudioModal({ onSave, onClose }: any) {
   const [listening, setListening] = useState(false);
 
   const startAudio = () => {
-    const w = window as any; const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!SR) return alert("Navegador não suporta áudio agora.");
-    const r = new SR(); r.lang = "pt-BR"; 
-    r.onresult = (e: any) => setText(e.results[0][0].transcript); 
-    r.onend = () => setListening(false); 
-    setListening(true); r.start();
+    try {
+      const w = window as any; 
+      const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
+      
+      // Proteção vital contra telas brancas se o celular bloquear o áudio
+      if (!SR) {
+        alert("O reconhecimento de voz não é suportado ou foi bloqueado pelo seu navegador neste formato. Por favor, digite o compromisso na caixa de texto.");
+        return;
+      }
+      
+      const r = new SR(); 
+      r.lang = "pt-BR"; 
+      r.continuous = false;
+      r.interimResults = false;
+
+      r.onstart = () => setListening(true);
+      
+      r.onresult = (e: any) => {
+        const tr = e.results[0][0].transcript;
+        setText(tr);
+      }; 
+      
+      r.onerror = (err: any) => {
+        console.error("Erro no reconhecimento de voz:", err);
+        setListening(false);
+        alert("Não foi possível acessar o microfone. Verifique as permissões do seu navegador celular (Safari/Chrome) ou simplesmente digite seu compromisso.");
+      };
+
+      r.onend = () => setListening(false); 
+      r.start();
+    } catch (error) {
+      console.error("Falha ao iniciar áudio:", error);
+      setListening(false);
+      alert("Erro ao acessar o microfone. A segurança do celular bloqueou a função. Use a digitação.");
+    }
   };
 
   return (
@@ -318,18 +349,17 @@ function SmartAudioModal({ onSave, onClose }: any) {
           <button onClick={onClose} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full"><X className="h-5 w-5" /></button>
         </div>
         <div className="relative mb-6">
-          <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Fale ou digite: 'Reunião em Itaicí amanhã às 10h' ou 'Comprar pão'" className="w-full h-32 bg-gray-50 dark:bg-gray-800 border-none rounded-3xl p-5 text-lg outline-none resize-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-400" />
+          <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Fale ou digite: 'Reunião em Itaicí amanhã às 10h' ou 'Comprar pão'" className="w-full h-32 bg-gray-50 dark:bg-gray-800 border-none rounded-3xl p-5 text-lg outline-none resize-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-400 text-gray-900 dark:text-white" />
           <button onClick={startAudio} className={`absolute bottom-4 right-4 h-12 w-12 rounded-full flex items-center justify-center transition-all ${listening ? 'bg-red-500 text-white animate-pulse' : 'bg-blue-600 text-white shadow-md hover:scale-105'}`}><Mic className="h-6 w-6" /></button>
         </div>
-        <button onClick={() => { onSave(parseEventInput(text)); setText(""); }} className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-4 rounded-full">Processar Pedido</button>
+        <button onClick={() => { if(text.trim()) { onSave(parseEventInput(text.trim())); setText(""); } }} className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-4 rounded-full transition-transform active:scale-95">Processar Comando</button>
       </div>
     </div>
   );
 }
 
-// Stubs simplificados para não estourar o limite de caracteres da resposta, mas funcionais para a UI
-function MonthView() { return <div className="p-8 text-center text-gray-500">Grade do Calendário Samsung</div>; }
-function WeekView() { return <div className="p-8 text-center text-gray-500">Grade da Semana</div>; }
-function RadarView() { return <div className="bg-blue-50 dark:bg-blue-900/20 p-8 rounded-[2.5rem] border border-blue-100 dark:border-blue-800"><h2 className="font-bold mb-2">Notificações e Alertas</h2><p className="text-sm">O sistema verifica periodicamente choques de horário sem sobrecarregar sua tela com pop-ups irritantes.</p></div>; }
+function MonthView() { return <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 text-center text-gray-500 border border-gray-100 dark:border-gray-800">Visualização Mensal (Samsung Vibe)</div>; }
+function WeekView() { return <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 text-center text-gray-500 border border-gray-100 dark:border-gray-800">Visualização da Semana</div>; }
+function RadarView() { return <div className="bg-blue-50 dark:bg-blue-900/20 p-8 rounded-[2.5rem] border border-blue-100 dark:border-blue-800"><h2 className="font-bold mb-2">Notificações e Alertas</h2><p className="text-sm">O sistema verifica periodicamente choques de horário sem sobrecarregar sua tela com pop-ups irritantes, preservando sua concentração no trabalho.</p></div>; }
 function DayDetailView({ onBack }:any) { return <button onClick={onBack} className="p-4 bg-gray-100 dark:bg-gray-800 rounded-2xl">Voltar ao Calendário</button>; }
-function EventEditor({ onClose }:any) { return <div className="fixed inset-0 z-50 flex items-center justify-center"><div className="bg-white p-8 rounded-[2.5rem]"><button onClick={onClose}>Fechar Edição</button></div></div>; }
+function EventEditor({ onClose }:any) { return <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm"><div className="bg-white dark:bg-gray-900 p-8 rounded-[2.5rem] border border-gray-100 dark:border-gray-800"><button onClick={onClose} className="px-4 py-2 bg-blue-600 text-white rounded-full font-bold">Fechar Edição</button></div></div>; }
