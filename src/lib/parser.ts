@@ -1,4 +1,4 @@
-import { ParsedResult, PersonCode, Category } from "./types";
+import type { ParsedResult, PersonCode, Category } from "./types";
 
 export function parseEventInput(input: string, context?: { defaultDate?: string }): ParsedResult {
   const lower = input.toLowerCase();

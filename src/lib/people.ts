@@ -1,4 +1,4 @@
-import { PersonCode } from "./types";
+import type { PersonCode } from "./types";
 
 export const PEOPLE: Record<PersonCode, any> = {
   F1: { code: "F1", name: "Felipe", role: "Pai", colorVar: "blue-500", softVar: "blue-100", defaultPhoto: null },

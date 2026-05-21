@@ -1,4 +1,4 @@
-import { AgendaEvent, AgendaTask, ShoppingItem } from './types';
+import type { AgendaEvent, AgendaTask, ShoppingItem } from './types';
 
 export const uid = () => Math.random().toString(36).substring(2, 9);
 export const nowISO = () => new Date().toISOString();
