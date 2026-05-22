@@ -1,4 +1,4 @@
-import type { AgendaEvent, AgendaTask, ShoppingItem } from "./types";
+import type { AgendaEvent, AgendaTask, ShoppingItem, ParsedResult } from "./types";
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 export async function analisarRotinaComIA(
@@ -107,4 +107,219 @@ ${JSON.stringify(comprasPendentes, null, 2)}
     console.error("Falha no motor de IA:", error);
     return ["O Radar está temporariamente offline. Tente novamente em instantes."];
   }
+}
+
+export async function interpretarEntradaRapidaComIA(input: string): Promise<ParsedResult | null> {
+  if (!GEMINI_API_KEY) {
+    return null;
+  }
+
+  const hoje = new Date().toISOString().split("T")[0];
+
+  const prompt = `
+Você é o intérprete inteligente do aplicativo Nossa Agenda.
+
+Sua função é transformar uma frase falada ou digitada em um registro organizado para agenda, tarefa ou compras.
+
+Data de hoje: ${hoje}
+
+Contexto:
+- F1 = Felipe
+- F2 = Fabiane
+- FF = família toda
+- CL = Clarisse
+- Trabalho do Felipe: Colégio Santo Inácio
+- Equipe de trabalho: Ariele, Laís, Lucas Vinicius e José
+- Locais importantes: Botafogo, Corrêas, Itaicí, Guadalupe
+- Preserve a grafia correta de Itaicí.
+- No trabalho, mantenha formações organizadas por Ciclo e Turma.
+
+Regras:
+1. Corrija erros comuns de transcrição de áudio.
+2. Organize maiúsculas e minúsculas.
+3. "efe um", "f um", "F um" devem virar F1.
+4. "efe dois", "f dois", "F dois" devem virar F2.
+5. "sete da noite" deve virar 19:00.
+6. "sete da manhã" deve virar 07:00.
+7. "meio-dia" deve virar 12:00.
+8. "amanhã", "hoje" e dias da semana devem virar data no formato YYYY-MM-DD.
+9. Se for compra, use kind = "shopping".
+10. Se for tarefa simples, use kind = "task".
+11. Se tiver data, horário, cliente, reunião, turma, formação, consulta ou evento, use kind = "event".
+12. Retorne apenas JSON puro, sem markdown e sem explicação.
+
+Formato para compromisso:
+{
+  "kind": "event",
+  "data": {
+    "personCode": "F1 ou F2 ou FF ou CL ou null",
+    "title": "Título corrigido",
+    "date": "YYYY-MM-DD ou null",
+    "startTime": "HH:mm ou null",
+    "endTime": "HH:mm ou null",
+    "durationMinutes": número ou null,
+    "location": "local/endereço ou null",
+    "category": "Saúde ou Trabalho ou Escola ou Casa ou Família ou Evento ou Documento ou Outro",
+    "priority": "Normal",
+    "sourceText": "frase corrigida e organizada"
+  }
+}
+
+Formato para tarefa:
+{
+  "kind": "task",
+  "data": {
+    "personCode": "F1 ou F2 ou FF ou CL ou null",
+    "title": "Tarefa corrigida",
+    "date": "YYYY-MM-DD ou null",
+    "category": "Saúde ou Trabalho ou Escola ou Casa ou Família ou Evento ou Documento ou Outro",
+    "priority": "Normal",
+    "status": "pendente",
+    "sourceText": "frase corrigida e organizada"
+  }
+}
+
+Formato para compra:
+{
+  "kind": "shopping",
+  "data": {
+    "item": "Item corrigido",
+    "quantity": "quantidade ou null",
+    "category": "Geral",
+    "status": "pendente",
+    "notes": "",
+    "sourceText": "frase corrigida e organizada"
+  }
+}
+
+Frase recebida:
+"${input}"
+`;
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt
+                }
+              ]
+            }
+          ]
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("Erro ao interpretar entrada com IA:", data);
+      return null;
+    }
+
+    let text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!text) {
+      return null;
+    }
+
+    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    const inicio = text.indexOf("{");
+    const fim = text.lastIndexOf("}");
+
+    if (inicio === -1 || fim === -1) {
+      return null;
+    }
+
+    const jsonLimpo = text.slice(inicio, fim + 1);
+    const resultado = JSON.parse(jsonLimpo);
+
+    return normalizarResultadoDaIA(resultado, input);
+  } catch (error) {
+    console.error("Falha ao interpretar entrada rápida com IA:", error);
+    return null;
+  }
+}
+
+function normalizarResultadoDaIA(resultado: any, textoOriginal: string): ParsedResult | null {
+  if (!resultado || !resultado.kind || !resultado.data) {
+    return null;
+  }
+
+  const data = limparNulos(resultado.data);
+  data.sourceText = data.sourceText || textoOriginal;
+
+  if (resultado.kind === "event") {
+    return {
+      kind: "event",
+      data: {
+        personCode: data.personCode ?? null,
+        title: data.title ?? "Compromisso",
+        date: data.date ?? null,
+        startTime: data.startTime ?? null,
+        endTime: data.endTime ?? null,
+        durationMinutes: data.durationMinutes ?? null,
+        location: data.location ?? null,
+        category: data.category ?? "Evento",
+        priority: data.priority ?? "Normal",
+        sourceText: data.sourceText,
+      },
+    };
+  }
+
+  if (resultado.kind === "task") {
+    return {
+      kind: "task",
+      data: {
+        personCode: data.personCode ?? null,
+        title: data.title ?? "Tarefa",
+        date: data.date ?? null,
+        category: data.category ?? "Casa",
+        priority: data.priority ?? "Normal",
+        status: data.status ?? "pendente",
+        sourceText: data.sourceText,
+      },
+    };
+  }
+
+  if (resultado.kind === "shopping") {
+    return {
+      kind: "shopping",
+      data: {
+        item: data.item ?? "Item de compra",
+        quantity: data.quantity ?? null,
+        category: data.category ?? "Geral",
+        status: data.status ?? "pendente",
+        notes: data.notes ?? "",
+        sourceText: data.sourceText,
+      },
+    };
+  }
+
+  return null;
+}
+
+function limparNulos(data: Record<string, any>) {
+  const novo: Record<string, any> = {};
+
+  for (const chave of Object.keys(data)) {
+    const valor = data[chave];
+
+    if (valor === "" || valor === "null" || valor === "undefined") {
+      novo[chave] = null;
+    } else {
+      novo[chave] = valor;
+    }
+  }
+
+  return novo;
 }

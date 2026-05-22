@@ -22,7 +22,7 @@ import { uid, nowISO } from "../lib/storage";
 import { PEOPLE, F1_ROUTINE } from "../lib/people";
 import { usePersonPhotos, fileToDataUrl } from "../lib/photos";
 import { formatBR } from "../lib/radar";
-import { analisarRotinaComIA } from "../lib/ai";
+import { analisarRotinaComIA, interpretarEntradaRapidaComIA } from "../lib/ai";
 import { useAgendaSync } from "../lib/firebase";
 import type { AgendaEvent, AgendaTask, Category, ParsedResult, PersonCode, ShoppingItem } from "../lib/types";
 
@@ -538,6 +538,7 @@ function FamilyView() {
 function SmartAudioModal({ onSave, onClose }: any) {
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
+  const [interpretando, setInterpretando] = useState(false);
   const [parsed, setParsed] = useState<ParsedResult | null>(null);
 
   const limparInterpretacao = () => {
@@ -558,27 +559,58 @@ function SmartAudioModal({ onSave, onClose }: any) {
     });
   };
 
-  const interpretarTexto = () => {
+  const interpretarTexto = async () => {
     const textoLimpo = text.trim();
-
+  
     if (!textoLimpo) {
       alert("Digite ou fale alguma informação antes de interpretar.");
       return;
     }
-
+  
+    setInterpretando(true);
+  
     try {
-      const resultado = parseEventInput(textoLimpo);
-
+      const resultadoIA = await interpretarEntradaRapidaComIA(textoLimpo);
+  
+      if (resultadoIA) {
+        const textoCorrigido = resultadoIA.data.sourceText || textoLimpo;
+  
+        setText(textoCorrigido);
+  
+        setParsed({
+          ...resultadoIA,
+          data: {
+            ...resultadoIA.data,
+            sourceText: textoCorrigido,
+          },
+        } as ParsedResult);
+  
+        return;
+      }
+  
+      const resultadoLocal = parseEventInput(textoLimpo);
+  
       setParsed({
-        ...resultado,
+        ...resultadoLocal,
         data: {
-          ...resultado.data,
+          ...resultadoLocal.data,
           sourceText: textoLimpo,
         },
       } as ParsedResult);
     } catch (error) {
       console.error("Erro ao interpretar texto:", error);
-      alert("Não consegui interpretar essa informação. Tente escrever de forma mais direta.");
+  
+      const resultadoLocal = parseEventInput(textoLimpo);
+  
+      setParsed({
+        ...resultadoLocal,
+        data: {
+          ...resultadoLocal.data,
+          sourceText: textoLimpo,
+        },
+      } as ParsedResult);
+    } finally {
+      setInterpretando(false);
     }
   };
 
@@ -691,11 +723,12 @@ function SmartAudioModal({ onSave, onClose }: any) {
           </button>
 
           <button
-            onClick={interpretarTexto}
-            className="py-4 rounded-full font-bold bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900"
-          >
-            Interpretar
-          </button>
+  onClick={interpretarTexto}
+  disabled={interpretando}
+  className="py-4 rounded-full font-bold bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 disabled:opacity-50"
+>
+  {interpretando ? "Interpretando..." : "Interpretar"}
+</button>
         </div>
 
         {parsed && (
