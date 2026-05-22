@@ -1,7 +1,6 @@
 import type { AgendaEvent, AgendaTask, ShoppingItem } from "./types";
 
-const GEMINI_API_KEY = "SUA_CHAVE_API_AQUI";
-
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 export async function analisarRotinaComIA(
   events: AgendaEvent[],
   tasks: AgendaTask[],
