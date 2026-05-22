@@ -1,14 +1,28 @@
 import { useState, useMemo, useEffect } from "react";
 import {
-  Calendar as CalendarIcon, CheckSquare, Home, Mic, Plus,
-  Radar, ShoppingCart, Trash2, Users, X, Pencil, Copy as CopyIcon,
-  Bell, ChevronRight, Moon, Sun, Briefcase, UserCircle
+  Calendar as CalendarIcon,
+  CheckSquare,
+  Home,
+  Mic,
+  Radar,
+  ShoppingCart,
+  Trash2,
+  Users,
+  X,
+  Pencil,
+  ChevronRight,
+  Moon,
+  Sun,
+  Briefcase,
+  UserCircle,
+  Sparkles
 } from "lucide-react";
 import { parseEventInput } from "../lib/parser";
 import { uid, nowISO } from "../lib/storage";
 import { PEOPLE, F1_ROUTINE } from "../lib/people";
 import { usePersonPhotos, fileToDataUrl } from "../lib/photos";
-import { generateRadarInsights, formatBR } from "../lib/radar";
+import { formatBR } from "../lib/radar";
+import { analisarRotinaComIA } from "../lib/ai";
 import { useAgendaSync } from "../lib/firebase";
 import type { AgendaEvent, AgendaTask, Category, ParsedResult, PersonCode, ShoppingItem } from "../lib/types";
 
@@ -117,13 +131,12 @@ export default function NossaAgendaApp() {
       </button>
 
       <nav className="md:hidden fixed bottom-0 left-0 w-full bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-t border-gray-200 dark:border-gray-800 flex justify-around py-2 px-1 z-40 pb-safe">
-        <NavIcon icon={Home} label="Início" active={view === "inicio"} onClick={() => setView("inicio")} />
-        <NavIcon icon={CalendarIcon} label="Mês" active={view === "mes"} onClick={() => setView("mes")} />
-        <NavIcon icon={Briefcase} label="Trabalho" active={view === "trabalho"} onClick={() => setView("trabalho")} />
-        <div className="w-10"></div>
-        <NavIcon icon={CheckSquare} label="Tarefas" active={view === "tarefas"} onClick={() => setView("tarefas")} />
-        <NavIcon icon={ShoppingCart} label="Compras" active={view === "compras"} onClick={() => setView("compras")} />
-      </nav>
+  <NavIcon icon={CalendarIcon} label="Mês" active={view === "mes"} onClick={() => setView("mes")} />
+  <NavIcon icon={Briefcase} label="Trabalho" active={view === "trabalho"} onClick={() => setView("trabalho")} />
+  <NavIcon icon={Radar} label="Radar" active={view === "radar"} onClick={() => setView("radar")} />
+  <NavIcon icon={CheckSquare} label="Tarefas" active={view === "tarefas"} onClick={() => setView("tarefas")} />
+  <NavIcon icon={ShoppingCart} label="Compras" active={view === "compras"} onClick={() => setView("compras")} />
+</nav>
 
       {view === "adicionar" && <SmartAudioModal onSave={saveParsed} onClose={() => setView("mes")} />}
       {editing && <EventEditor event={editing} onClose={() => setEditing(null)} onSave={(updated: AgendaEvent) => { setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e))); setEditing(null); }} onDelete={(id: string) => { setEvents((prev) => prev.filter((e) => e.id !== id)); setEditing(null); }} />}
@@ -376,21 +389,86 @@ function ProfileLGPDView() {
   );
 }
 
-function RadarView({ events, tasks, shopping }: any) { 
-  const insights = generateRadarInsights(events, tasks, shopping); 
+function RadarView({ events, tasks, shopping }: {
+  events: AgendaEvent[];
+  tasks: AgendaTask[];
+  shopping: ShoppingItem[];
+}) {
+  const [insights, setInsights] = useState<string[]>([]);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const atualizarRadar = async () => {
+    setCarregando(true);
+    setErro(null);
+
+    try {
+      const resposta = await analisarRotinaComIA(events, tasks, shopping);
+      setInsights(Array.isArray(resposta) ? resposta : ["A IA respondeu em um formato inesperado."]);
+    } catch (error) {
+      console.error("Erro ao atualizar Radar:", error);
+      setErro("Não foi possível consultar a IA agora.");
+      setInsights([]);
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  useEffect(() => {
+    atualizarRadar();
+  }, [events, tasks, shopping]);
+
   return (
     <div className="max-w-2xl space-y-6">
       <div className="bg-gray-900 dark:bg-gray-800 rounded-[2.5rem] p-8 text-white shadow-xl mb-8 relative overflow-hidden">
         <div className="relative z-10">
-           <Radar className="h-10 w-10 text-blue-400 mb-4" />
-           <h2 className="text-2xl font-bold mb-2">Assistente Ativo</h2>
-           <p className="text-gray-300 text-sm">O sistema verifica automaticamente choques de horário e pendências para evitar conflitos no trabalho e em casa, sem lhe encher de notificações.</p>
+          <Radar className="h-10 w-10 text-blue-400 mb-4" />
+          <h2 className="text-2xl font-bold mb-2">Radar Inteligente</h2>
+          <p className="text-gray-300 text-sm">
+            A IA analisa compromissos, tarefas e compras para apontar choques de horário, pendências e riscos na rotina.
+          </p>
+
+          <button
+            onClick={atualizarRadar}
+            disabled={carregando}
+            className="mt-5 bg-white text-gray-900 px-5 py-3 rounded-full text-sm font-bold disabled:opacity-60"
+          >
+            {carregando ? "Analisando..." : "Atualizar Radar"}
+          </button>
         </div>
+
         <div className="absolute -right-10 -bottom-10 h-48 w-48 border-[20px] border-white/5 rounded-full pointer-events-none"></div>
       </div>
-      {insights.length === 0 ? <EmptyState text="O radar está limpo. Tudo perfeitamente organizado!" /> : insights.map((msg, i) => <div key={i} className="flex gap-4 bg-white dark:bg-gray-900 p-5 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800"><div className="h-10 w-10 shrink-0 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-500"><Sparkles className="h-5 w-5" /></div><p className="text-sm font-medium mt-1">{msg}</p></div>)}
+
+      {erro && (
+        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 p-5 rounded-3xl text-sm font-medium">
+          {erro}
+        </div>
+      )}
+
+      {carregando && (
+        <div className="p-6 text-center border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-3xl text-gray-400 text-sm font-medium">
+          Consultando a inteligência artificial...
+        </div>
+      )}
+
+      {!carregando && insights.length === 0 && !erro && (
+        <EmptyState text="O radar está limpo. Tudo organizado por enquanto." />
+      )}
+
+      {!carregando && insights.map((msg, i) => (
+        <div
+          key={i}
+          className="flex gap-4 bg-white dark:bg-gray-900 p-5 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800"
+        >
+          <div className="h-10 w-10 shrink-0 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-500">
+            <Sparkles className="h-5 w-5" />
+          </div>
+          <p className="text-sm font-medium mt-1">{msg}</p>
+        </div>
+      ))}
     </div>
-  ); 
+  );
 }
 
 function FamilyView() {
