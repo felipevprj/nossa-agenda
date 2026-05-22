@@ -48,22 +48,76 @@ export default function NossaAgendaApp() {
 
   const saveParsed = (parsed: ParsedResult) => {
     const now = nowISO();
+  
     if (parsed.kind === "event") {
       const e: AgendaEvent = {
-        id: uid(), type: "event", familyId: "nossa-familia", createdBy: "F1",
-        personCode: parsed.data.personCode ?? null, personName: parsed.data.personCode ? PEOPLE[parsed.data.personCode].name : null,
-        title: parsed.data.title ?? "Sem título", date: parsed.data.date ?? null,
-        startTime: parsed.data.startTime ?? null, endTime: parsed.data.endTime ?? null,
-        durationMinutes: parsed.data.durationMinutes ?? null, location: parsed.data.location ?? null,
-        category: (parsed.data.category as Category) ?? "Evento", priority: "Normal", reminders: ["15 min antes"], notes: "", sourceText: parsed.data.sourceText ?? "",
-        createdAt: now, updatedAt: now, isAllDay: !parsed.data.startTime, isRecurring: false, recurrenceRule: null, needsConfirmation: false, missingFields: [],
+        id: uid(),
+        type: "event",
+        familyId: "nossa-familia",
+        createdBy: "F1",
+        personCode: parsed.data.personCode ?? null,
+        personName: parsed.data.personCode ? PEOPLE[parsed.data.personCode].name : null,
+        title: parsed.data.title ?? "Sem título",
+        date: parsed.data.date ?? null,
+        startTime: parsed.data.startTime ?? null,
+        endTime: parsed.data.endTime ?? null,
+        durationMinutes: parsed.data.durationMinutes ?? null,
+        location: parsed.data.location ?? null,
+        category: (parsed.data.category as Category) ?? "Evento",
+        priority: parsed.data.priority ?? "Normal",
+        reminders: parsed.data.reminders ?? ["15 min antes"],
+        notes: parsed.data.notes ?? "",
+        sourceText: parsed.data.sourceText ?? "",
+        createdAt: now,
+        updatedAt: now,
+        isAllDay: !parsed.data.startTime,
+        isRecurring: false,
+        recurrenceRule: null,
+        needsConfirmation: false,
+        missingFields: [],
       };
+  
       setEvents((prev) => [...prev, e]);
-    } else if (parsed.kind === "task") {
-      setTasks((prev) => [...prev, { id: uid(), type: "task", familyId: "nossa-familia", createdBy: "F1", personCode: null, title: parsed.data.title ?? "Tarefa", date: null, category: "Casa", priority: "Normal", status: "pendente", sourceText: "", createdAt: now, updatedAt: now }]);
-    } else {
-      setShopping((prev) => [...prev, { id: uid(), type: "shopping", familyId: "nossa-familia", item: parsed.data.item ?? "", quantity: null, category: "Geral", status: "pendente", notes: "", sourceText: "", createdAt: now, updatedAt: now }]);
     }
+  
+    if (parsed.kind === "task") {
+      const t: AgendaTask = {
+        id: uid(),
+        type: "task",
+        familyId: "nossa-familia",
+        createdBy: "F1",
+        personCode: parsed.data.personCode ?? null,
+        title: parsed.data.title ?? "Tarefa",
+        date: parsed.data.date ?? null,
+        category: (parsed.data.category as Category) ?? "Casa",
+        priority: parsed.data.priority ?? "Normal",
+        status: parsed.data.status ?? "pendente",
+        sourceText: parsed.data.sourceText ?? "",
+        createdAt: now,
+        updatedAt: now,
+      };
+  
+      setTasks((prev) => [...prev, t]);
+    }
+  
+    if (parsed.kind === "shopping") {
+      const item: ShoppingItem = {
+        id: uid(),
+        type: "shopping",
+        familyId: "nossa-familia",
+        item: parsed.data.item ?? "Item",
+        quantity: parsed.data.quantity ?? null,
+        category: parsed.data.category ?? "Geral",
+        status: parsed.data.status ?? "pendente",
+        notes: parsed.data.notes ?? "",
+        sourceText: parsed.data.sourceText ?? "",
+        createdAt: now,
+        updatedAt: now,
+      };
+  
+      setShopping((prev) => [...prev, item]);
+    }
+  
     setView("mes");
   };
 
@@ -484,49 +538,311 @@ function FamilyView() {
 function SmartAudioModal({ onSave, onClose }: any) {
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
+  const [parsed, setParsed] = useState<ParsedResult | null>(null);
+
+  const limparInterpretacao = () => {
+    setParsed(null);
+  };
+
+  const atualizarCampo = (campo: string, valor: any) => {
+    setParsed((atual) => {
+      if (!atual) return atual;
+
+      return {
+        ...atual,
+        data: {
+          ...atual.data,
+          [campo]: valor === "" ? null : valor,
+        },
+      } as ParsedResult;
+    });
+  };
+
+  const interpretarTexto = () => {
+    const textoLimpo = text.trim();
+
+    if (!textoLimpo) {
+      alert("Digite ou fale alguma informação antes de interpretar.");
+      return;
+    }
+
+    try {
+      const resultado = parseEventInput(textoLimpo);
+
+      setParsed({
+        ...resultado,
+        data: {
+          ...resultado.data,
+          sourceText: textoLimpo,
+        },
+      } as ParsedResult);
+    } catch (error) {
+      console.error("Erro ao interpretar texto:", error);
+      alert("Não consegui interpretar essa informação. Tente escrever de forma mais direta.");
+    }
+  };
+
+  const confirmar = () => {
+    if (!parsed) {
+      alert("Interprete a informação antes de salvar.");
+      return;
+    }
+
+    onSave(parsed);
+    setText("");
+    setParsed(null);
+  };
 
   const startAudio = () => {
     try {
-      const w = window as any; 
+      const w = window as any;
       const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
-      
+
       if (!SR) {
-        alert("O seu navegador bloqueou o microfone ou não suporta a função. Por favor, digite na caixa de texto logo acima do botão.");
+        alert("Este navegador não suporta reconhecimento de voz. Digite sua informação no campo de texto.");
         return;
       }
-      
-      const r = new SR(); 
-      r.lang = "pt-BR"; 
+
+      const r = new SR();
+
+      r.lang = "pt-BR";
       r.continuous = false;
       r.interimResults = false;
 
-      r.onstart = () => setListening(true);
-      r.onresult = (e: any) => setText(e.results[0][0].transcript); 
-      r.onerror = (err: any) => {
-        console.error("Erro no reconhecimento:", err);
-        setListening(false);
-        alert("O microfone foi bloqueado pelo sistema do celular. Digite seu compromisso normalmente.");
+      r.onstart = () => {
+        setListening(true);
+        limparInterpretacao();
       };
-      r.onend = () => setListening(false); 
+
+      r.onresult = (e: any) => {
+        const transcricao = e.results?.[0]?.[0]?.transcript ?? "";
+        setText(transcricao);
+        setParsed(null);
+      };
+
+      r.onerror = (err: any) => {
+        console.error("Erro no reconhecimento de voz:", err);
+        setListening(false);
+        alert("O microfone foi bloqueado ou falhou. Você pode digitar normalmente.");
+      };
+
+      r.onend = () => {
+        setListening(false);
+      };
+
       r.start();
     } catch (error) {
+      console.error("Falha ao iniciar microfone:", error);
       setListening(false);
       alert("Falha ao iniciar o microfone. Use a digitação.");
     }
   };
 
+  const tipoDaEntrada =
+    parsed?.kind === "event"
+      ? "Compromisso"
+      : parsed?.kind === "task"
+      ? "Tarefa"
+      : parsed?.kind === "shopping"
+      ? "Compra"
+      : "";
+
   return (
     <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end md:items-center justify-center p-4">
-      <div className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-[2.5rem] p-6 shadow-2xl animate-in slide-in-from-bottom-10 border border-gray-100 dark:border-gray-800">
+      <div className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-[2.5rem] p-6 shadow-2xl border border-gray-100 dark:border-gray-800 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400"><Sparkles className="h-5 w-5" /><h2 className="text-lg font-bold">Assistente Inteligente</h2></div>
-          <button onClick={onClose} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full"><X className="h-5 w-5" /></button>
+          <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+            <Sparkles className="h-5 w-5" />
+            <h2 className="text-lg font-bold">Entrada rápida</h2>
+          </div>
+
+          <button onClick={onClose} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full">
+            <X className="h-5 w-5" />
+          </button>
         </div>
-        <div className="relative mb-6">
-          <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Digite: 'Reunião com Ariele amanhã às 10h' ou clique no microfone para falar..." className="w-full h-36 bg-gray-50 dark:bg-gray-800 border-none rounded-3xl p-5 text-lg outline-none resize-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-400 font-medium" />
-          <button onClick={startAudio} className={`absolute bottom-4 right-4 h-14 w-14 rounded-full flex items-center justify-center transition-all ${listening ? 'bg-red-500 text-white animate-pulse shadow-lg shadow-red-500/40' : 'bg-blue-600 text-white shadow-lg shadow-blue-500/40 hover:scale-105'}`}><Mic className="h-6 w-6" /></button>
+
+        <div className="mb-5">
+          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">
+            Fale ou escreva
+          </label>
+
+          <textarea
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              setParsed(null);
+            }}
+            placeholder="Exemplos: reunião com Ariele amanhã às 10h, comprar sabão, varrer a casa, f2 cliente terça às 19h..."
+            className="w-full h-36 bg-gray-50 dark:bg-gray-800 border-none rounded-3xl p-5 text-base outline-none resize-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-400 font-medium"
+          />
         </div>
-        <button onClick={() => { if(text.trim()) { onSave(parseEventInput(text.trim())); setText(""); } }} className="w-full bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 font-bold py-4 rounded-full active:scale-95 transition-transform">Processar Comando</button>
+
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          <button
+            onClick={startAudio}
+            className={`py-4 rounded-full font-bold flex items-center justify-center gap-2 transition-all ${
+              listening
+                ? "bg-red-500 text-white animate-pulse"
+                : "bg-blue-600 text-white"
+            }`}
+          >
+            <Mic className="h-5 w-5" />
+            {listening ? "Ouvindo..." : "Falar"}
+          </button>
+
+          <button
+            onClick={interpretarTexto}
+            className="py-4 rounded-full font-bold bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900"
+          >
+            Interpretar
+          </button>
+        </div>
+
+        {parsed && (
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-[2rem] p-5 border border-gray-100 dark:border-gray-700 mb-6">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                  Confirme antes de salvar
+                </p>
+                <h3 className="text-xl font-bold">{tipoDaEntrada}</h3>
+              </div>
+
+              <span className="text-xs font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 px-3 py-1 rounded-full">
+                Prévia
+              </span>
+            </div>
+
+            {parsed.kind === "event" && (
+              <div className="space-y-3">
+                <CampoTexto
+                  label="Título"
+                  value={parsed.data.title ?? ""}
+                  onChange={(valor: string) => atualizarCampo("title", valor)}
+                />
+
+                <div className="grid grid-cols-2 gap-3">
+                  <CampoTexto
+                    label="Data"
+                    type="date"
+                    value={parsed.data.date ?? ""}
+                    onChange={(valor: string) => atualizarCampo("date", valor)}
+                  />
+
+                  <CampoTexto
+                    label="Início"
+                    type="time"
+                    value={parsed.data.startTime ?? ""}
+                    onChange={(valor: string) => atualizarCampo("startTime", valor)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <CampoTexto
+                    label="Fim"
+                    type="time"
+                    value={parsed.data.endTime ?? ""}
+                    onChange={(valor: string) => atualizarCampo("endTime", valor)}
+                  />
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1 ml-1">
+                      Categoria
+                    </label>
+                    <select
+                      value={(parsed.data.category as Category) ?? "Evento"}
+                      onChange={(e) => atualizarCampo("category", e.target.value)}
+                      className="w-full bg-white dark:bg-gray-900 rounded-2xl p-3 font-medium outline-none border border-gray-200 dark:border-gray-700"
+                    >
+                      {CATEGORIES.map((categoria) => (
+                        <option key={categoria}>{categoria}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <CampoTexto
+                  label="Local"
+                  value={parsed.data.location ?? ""}
+                  onChange={(valor: string) => atualizarCampo("location", valor)}
+                />
+              </div>
+            )}
+
+            {parsed.kind === "task" && (
+              <div className="space-y-3">
+                <CampoTexto
+                  label="Tarefa"
+                  value={parsed.data.title ?? ""}
+                  onChange={(valor: string) => atualizarCampo("title", valor)}
+                />
+
+                <div className="grid grid-cols-2 gap-3">
+                  <CampoTexto
+                    label="Data"
+                    type="date"
+                    value={parsed.data.date ?? ""}
+                    onChange={(valor: string) => atualizarCampo("date", valor)}
+                  />
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1 ml-1">
+                      Categoria
+                    </label>
+                    <select
+                      value={(parsed.data.category as Category) ?? "Casa"}
+                      onChange={(e) => atualizarCampo("category", e.target.value)}
+                      className="w-full bg-white dark:bg-gray-900 rounded-2xl p-3 font-medium outline-none border border-gray-200 dark:border-gray-700"
+                    >
+                      {CATEGORIES.map((categoria) => (
+                        <option key={categoria}>{categoria}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {parsed.kind === "shopping" && (
+              <div className="space-y-3">
+                <CampoTexto
+                  label="Item"
+                  value={parsed.data.item ?? ""}
+                  onChange={(valor: string) => atualizarCampo("item", valor)}
+                />
+
+                <CampoTexto
+                  label="Quantidade"
+                  value={parsed.data.quantity ?? ""}
+                  onChange={(valor: string) => atualizarCampo("quantity", valor)}
+                />
+
+                <CampoTexto
+                  label="Categoria"
+                  value={parsed.data.category ?? "Geral"}
+                  onChange={(valor: string) => atualizarCampo("category", valor)}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={onClose}
+            className="py-4 rounded-full font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300"
+          >
+            Cancelar
+          </button>
+
+          <button
+            onClick={confirmar}
+            disabled={!parsed}
+            className="py-4 rounded-full font-bold bg-blue-600 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Confirmar e salvar
+          </button>
+        </div>
       </div>
     </div>
   );
