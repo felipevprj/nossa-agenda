@@ -1,4 +1,11 @@
-import type { AgendaEvent, AgendaTask, ShoppingItem, ParsedResult } from "./types";
+import type {
+  AgendaEvent,
+  AgendaTask,
+  ShoppingItem,
+  ParsedResult,
+  PersonCode,
+  Category
+} from "./types";
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 export async function analisarRotinaComIA(
@@ -119,40 +126,101 @@ export async function interpretarEntradaRapidaComIA(input: string): Promise<Pars
   const prompt = `
 Você é o intérprete inteligente do aplicativo Nossa Agenda.
 
-Sua função é transformar uma frase falada ou digitada em um registro organizado para agenda, tarefa ou compras.
+Sua tarefa é transformar uma frase falada ou digitada em um objeto JSON válido para agenda, tarefa ou compras.
 
-Data de hoje: ${hoje}
+DATA DE HOJE:
+${hoje}
 
-Contexto:
+CÓDIGOS FIXOS:
 - F1 = Felipe
 - F2 = Fabiane
-- FF = família toda
 - CL = Clarisse
-- Trabalho do Felipe: Colégio Santo Inácio
-- Equipe de trabalho: Ariele, Laís, Lucas Vinicius e José
-- Locais importantes: Botafogo, Corrêas, Itaicí, Guadalupe
+- FF = família toda
+
+ATENÇÃO A ERROS DE ÁUDIO:
+- "efe um", "f um", "fium", "felipe" = F1
+- "efe dois", "f dois", "fdóis", "fabiane" = F2
+- "clarice", "clarisse", "cl" = CL
+- "todo mundo", "família", "todos juntos", "ff" = FF
+- "sete da noite" = 19:00
+- "sete da manhã" = 07:00
+- "dez e meia" = 10:30
+- "meio-dia" = 12:00
+- "corrêas", "correas", "coreas" = Corrêas
+- "itaici", "itaicí" = Itaicí
+- "santo inacio", "santo inácio" = Colégio Santo Inácio
+
+REGRAS DE DOMÍNIO:
+- Eventos de turma, formação, manhã de formação, dia de formação, catequese ou mentoria pertencem à categoria "Escola".
+- Cliente da Fabiane normalmente é F2 e categoria "Trabalho".
+- Consulta, pediatra, vacina ou exame da Clarisse normalmente é CL e categoria "Saúde".
+- Almoço, jantar, passeio ou compromisso de todos normalmente é FF e categoria "Família".
+- Compras vão para kind "shopping".
+- Tarefas simples sem horário vão para kind "task".
+- Compromissos com data, horário, local, reunião, cliente, turma ou formação vão para kind "event".
+- No contexto do Colégio Santo Inácio, preserve organização por Ciclo e Turma quando aparecer.
 - Preserve a grafia correta de Itaicí.
-- No trabalho, mantenha formações organizadas por Ciclo e Turma.
 
-Regras:
-1. Corrija erros comuns de transcrição de áudio.
-2. Organize maiúsculas e minúsculas.
-3. "efe um", "f um", "F um" devem virar F1.
-4. "efe dois", "f dois", "F dois" devem virar F2.
-5. "sete da noite" deve virar 19:00.
-6. "sete da manhã" deve virar 07:00.
-7. "meio-dia" deve virar 12:00.
-8. "amanhã", "hoje" e dias da semana devem virar data no formato YYYY-MM-DD.
-9. Se for compra, use kind = "shopping".
-10. Se for tarefa simples, use kind = "task".
-11. Se tiver data, horário, cliente, reunião, turma, formação, consulta ou evento, use kind = "event".
-12. Retorne apenas JSON puro, sem markdown e sem explicação.
-
-Formato para compromisso:
+EXEMPLOS:
+Frase: "efe dois cliente terça sete da noite"
+Resposta:
 {
   "kind": "event",
   "data": {
-    "personCode": "F1 ou F2 ou FF ou CL ou null",
+    "personCode": "F2",
+    "title": "Cliente",
+    "date": "YYYY-MM-DD",
+    "startTime": "19:00",
+    "endTime": "20:00",
+    "durationMinutes": 60,
+    "location": null,
+    "category": "Trabalho",
+    "priority": "Normal",
+    "sourceText": "F2 cliente terça às 19h"
+  }
+}
+
+Frase: "f um correas turma quarenta e três doze do seis sete horas"
+Resposta:
+{
+  "kind": "event",
+  "data": {
+    "personCode": "F1",
+    "title": "Corrêas turma 43",
+    "date": "YYYY-MM-DD",
+    "startTime": "07:00",
+    "endTime": null,
+    "durationMinutes": null,
+    "location": "Corrêas",
+    "category": "Escola",
+    "priority": "Normal",
+    "sourceText": "F1 Corrêas turma 43 12/06 às 7h"
+  }
+}
+
+Frase: "clarisse pediatra amanhã dez e meia em botafogo"
+Resposta:
+{
+  "kind": "event",
+  "data": {
+    "personCode": "CL",
+    "title": "Pediatra da Clarisse",
+    "date": "YYYY-MM-DD",
+    "startTime": "10:30",
+    "endTime": "11:30",
+    "durationMinutes": 60,
+    "location": "Botafogo",
+    "category": "Saúde",
+    "priority": "Normal",
+    "sourceText": "CL pediatra amanhã às 10h30 em Botafogo"
+  }
+}
+
+FORMATO OBRIGATÓRIO PARA EVENTO:
+{
+  "kind": "event",
+  "data": {
+    "personCode": "F1 ou F2 ou CL ou FF ou null",
     "title": "Título corrigido",
     "date": "YYYY-MM-DD ou null",
     "startTime": "HH:mm ou null",
@@ -161,25 +229,25 @@ Formato para compromisso:
     "location": "local/endereço ou null",
     "category": "Saúde ou Trabalho ou Escola ou Casa ou Família ou Evento ou Documento ou Outro",
     "priority": "Normal",
-    "sourceText": "frase corrigida e organizada"
+    "sourceText": "frase corrigida"
   }
 }
 
-Formato para tarefa:
+FORMATO OBRIGATÓRIO PARA TAREFA:
 {
   "kind": "task",
   "data": {
-    "personCode": "F1 ou F2 ou FF ou CL ou null",
+    "personCode": "F1 ou F2 ou CL ou FF ou null",
     "title": "Tarefa corrigida",
     "date": "YYYY-MM-DD ou null",
     "category": "Saúde ou Trabalho ou Escola ou Casa ou Família ou Evento ou Documento ou Outro",
     "priority": "Normal",
     "status": "pendente",
-    "sourceText": "frase corrigida e organizada"
+    "sourceText": "frase corrigida"
   }
 }
 
-Formato para compra:
+FORMATO OBRIGATÓRIO PARA COMPRA:
 {
   "kind": "shopping",
   "data": {
@@ -188,11 +256,13 @@ Formato para compra:
     "category": "Geral",
     "status": "pendente",
     "notes": "",
-    "sourceText": "frase corrigida e organizada"
+    "sourceText": "frase corrigida"
   }
 }
 
-Frase recebida:
+Responda apenas com JSON puro. Não use markdown. Não explique.
+
+FRASE RECEBIDA:
 "${input}"
 `;
 
@@ -207,13 +277,12 @@ Frase recebida:
         body: JSON.stringify({
           contents: [
             {
-              parts: [
-                {
-                  text: prompt
-                }
-              ]
+              parts: [{ text: prompt }]
             }
-          ]
+          ],
+          generationConfig: {
+            temperature: 0.1
+          }
         })
       }
     );
@@ -221,7 +290,7 @@ Frase recebida:
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("Erro ao interpretar entrada com IA:", data);
+      console.error("Erro ao interpretar entrada rápida com IA:", data);
       return null;
     }
 
@@ -256,22 +325,21 @@ function normalizarResultadoDaIA(resultado: any, textoOriginal: string): ParsedR
   }
 
   const data = limparNulos(resultado.data);
-  data.sourceText = data.sourceText || textoOriginal;
 
   if (resultado.kind === "event") {
     return {
       kind: "event",
       data: {
-        personCode: data.personCode ?? null,
-        title: data.title ?? "Compromisso",
+        personCode: normalizarCodigoPessoa(data.personCode),
+        title: normalizarTitulo(data.title || "Compromisso"),
         date: data.date ?? null,
-        startTime: data.startTime ?? null,
-        endTime: data.endTime ?? null,
-        durationMinutes: data.durationMinutes ?? null,
-        location: data.location ?? null,
-        category: data.category ?? "Evento",
-        priority: data.priority ?? "Normal",
-        sourceText: data.sourceText,
+        startTime: normalizarHorario(data.startTime),
+        endTime: normalizarHorario(data.endTime),
+        durationMinutes: typeof data.durationMinutes === "number" ? data.durationMinutes : null,
+        location: normalizarLocal(data.location),
+        category: normalizarCategoria(data.category),
+        priority: "Normal",
+        sourceText: normalizarFonte(data.sourceText || textoOriginal),
       },
     };
   }
@@ -280,13 +348,13 @@ function normalizarResultadoDaIA(resultado: any, textoOriginal: string): ParsedR
     return {
       kind: "task",
       data: {
-        personCode: data.personCode ?? null,
-        title: data.title ?? "Tarefa",
+        personCode: normalizarCodigoPessoa(data.personCode),
+        title: normalizarTitulo(data.title || "Tarefa"),
         date: data.date ?? null,
-        category: data.category ?? "Casa",
-        priority: data.priority ?? "Normal",
-        status: data.status ?? "pendente",
-        sourceText: data.sourceText,
+        category: normalizarCategoria(data.category || "Casa"),
+        priority: "Normal",
+        status: "pendente",
+        sourceText: normalizarFonte(data.sourceText || textoOriginal),
       },
     };
   }
@@ -295,12 +363,12 @@ function normalizarResultadoDaIA(resultado: any, textoOriginal: string): ParsedR
     return {
       kind: "shopping",
       data: {
-        item: data.item ?? "Item de compra",
+        item: normalizarTitulo(data.item || "Item de compra"),
         quantity: data.quantity ?? null,
-        category: data.category ?? "Geral",
-        status: data.status ?? "pendente",
-        notes: data.notes ?? "",
-        sourceText: data.sourceText,
+        category: data.category || "Geral",
+        status: "pendente",
+        notes: data.notes || "",
+        sourceText: normalizarFonte(data.sourceText || textoOriginal),
       },
     };
   }
@@ -314,7 +382,12 @@ function limparNulos(data: Record<string, any>) {
   for (const chave of Object.keys(data)) {
     const valor = data[chave];
 
-    if (valor === "" || valor === "null" || valor === "undefined") {
+    if (
+      valor === "" ||
+      valor === "null" ||
+      valor === "undefined" ||
+      valor === undefined
+    ) {
       novo[chave] = null;
     } else {
       novo[chave] = valor;
@@ -322,4 +395,102 @@ function limparNulos(data: Record<string, any>) {
   }
 
   return novo;
+}
+
+function normalizarCodigoPessoa(valor: any): PersonCode | null {
+  const texto = normalizarTexto(String(valor ?? ""));
+
+  if (!texto || texto === "null") return null;
+
+  if (["f1", "f um", "efe um", "felipe"].includes(texto)) return "F1";
+  if (["f2", "f dois", "efe dois", "fabiane"].includes(texto)) return "F2";
+  if (["cl", "clarisse", "clarice"].includes(texto)) return "CL";
+  if (["ff", "familia", "família", "todos", "todo mundo"].includes(texto)) return "FF";
+
+  return null;
+}
+
+function normalizarCategoria(valor: any): Category {
+  const texto = String(valor ?? "").trim();
+
+  const categorias: Category[] = [
+    "Saúde",
+    "Trabalho",
+    "Escola",
+    "Casa",
+    "Família",
+    "Evento",
+    "Documento",
+    "Outro",
+  ];
+
+  if (categorias.includes(texto as Category)) {
+    return texto as Category;
+  }
+
+  const normalizado = normalizarTexto(texto);
+
+  if (normalizado.includes("saude")) return "Saúde";
+  if (normalizado.includes("trabalho")) return "Trabalho";
+  if (normalizado.includes("escola")) return "Escola";
+  if (normalizado.includes("casa")) return "Casa";
+  if (normalizado.includes("familia")) return "Família";
+  if (normalizado.includes("documento")) return "Documento";
+
+  return "Evento";
+}
+
+function normalizarHorario(valor: any): string | null {
+  if (!valor) return null;
+
+  const texto = String(valor).trim();
+
+  const match = texto.match(/^(\d{1,2}):(\d{2})$/);
+  if (match) {
+    const hora = Number(match[1]);
+    const minuto = Number(match[2]);
+
+    if (hora >= 0 && hora <= 23 && minuto >= 0 && minuto <= 59) {
+      return `${String(hora).padStart(2, "0")}:${String(minuto).padStart(2, "0")}`;
+    }
+  }
+
+  return null;
+}
+
+function normalizarLocal(valor: any): string | null {
+  if (!valor) return null;
+
+  const texto = String(valor).trim();
+  const normalizado = normalizarTexto(texto);
+
+  if (!texto || normalizado === "null") return null;
+  if (normalizado.includes("correas") || normalizado.includes("coreas")) return "Corrêas";
+  if (normalizado.includes("itaici")) return "Itaicí";
+  if (normalizado.includes("santo inacio")) return "Colégio Santo Inácio";
+  if (normalizado.includes("botafogo")) return "Botafogo";
+  if (normalizado.includes("guadalupe")) return "Guadalupe";
+
+  return normalizarTitulo(texto);
+}
+
+function normalizarTitulo(valor: string): string {
+  const texto = String(valor || "").replace(/\s+/g, " ").trim();
+
+  if (!texto) return "";
+
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+function normalizarFonte(valor: string): string {
+  return String(valor || "").replace(/\s+/g, " ").trim();
+}
+
+function normalizarTexto(valor: string): string {
+  return valor
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
