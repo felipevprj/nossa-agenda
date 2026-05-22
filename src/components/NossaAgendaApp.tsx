@@ -847,7 +847,32 @@ function SmartAudioModal({ onSave, onClose }: any) {
     </div>
   );
 }
+function CampoTexto({
+  label,
+  value,
+  onChange,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (valor: string) => void;
+  type?: string;
+}) {
+  return (
+    <div>
+      <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1 ml-1">
+        {label}
+      </label>
 
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-white dark:bg-gray-900 rounded-2xl p-3 font-medium outline-none border border-gray-200 dark:border-gray-700 focus:border-blue-500"
+      />
+    </div>
+  );
+}
 function EventEditor({ event, onClose, onSave, onDelete }: any) {
   const [e, setE] = useState(event);
   return (
