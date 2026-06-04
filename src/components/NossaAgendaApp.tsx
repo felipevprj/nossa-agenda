@@ -25,7 +25,9 @@ import { uid, nowISO } from "../lib/storage";
 import { PEOPLE } from "../lib/people";
 import { formatBR } from "../lib/radar";
 import { analisarRotinaComIA, interpretarEntradaRapidaComIA } from "../lib/ai";
-import { useAgendaSync } from "../lib/firebase";
+import { sairDaAgenda, useAgendaSync, useAuthUser } from "../lib/firebase";
+import LoginScreen from "./LoginScreen";
+import { baixarBackupAgendaFF } from "../lib/backup";
 import { criarLinkGoogleMaps, criarLinkRotaGoogleMaps } from "../lib/maps";
 import type {
   AgendaEvent,
@@ -73,8 +75,10 @@ export default function NossaAgendaApp() {
   const [editing, setEditing] = useState<AgendaEvent | null>(null);
   const [isDark, setIsDark] = useState(false);
 
+  const { user, isAuthLoading } = useAuthUser();
+
   const { events, setEvents, tasks, setTasks, shopping, setShopping, isLoading } =
-    useAgendaSync();
+    useAgendaSync(user);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", isDark);
@@ -157,7 +161,7 @@ export default function NossaAgendaApp() {
     setView("mes");
   };
 
-  if (isLoading) {
+  if (isAuthLoading || isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-950">
         <div className="flex flex-col items-center gap-4">
@@ -168,6 +172,10 @@ export default function NossaAgendaApp() {
         </div>
       </div>
     );
+  }
+  
+  if (!user) {
+    return <LoginScreen />;
   }
 
   return (
@@ -229,7 +237,12 @@ export default function NossaAgendaApp() {
             )}
           </button>
         </header>
-
+        <button
+  onClick={() => baixarBackupAgendaFF(events, tasks, shopping)}
+  className="px-4 py-2 rounded-full bg-gray-900 text-white text-sm font-bold dark:bg-white dark:text-gray-900"
+>
+  Backup
+</button>
         {view === "inicio" && (
           <TodayView
             events={events}
@@ -274,7 +287,13 @@ export default function NossaAgendaApp() {
         {view === "tarefas" && <TasksView tasks={tasks} setTasks={setTasks} />}
         {view === "compras" && <ShoppingView items={shopping} setItems={setShopping} />}
         {view === "trabalho" && <WorkScheduleView />}
-        {view === "perfil" && <ProfileLGPDView />}
+        {view === "perfil" && (
+  <ProfileLGPDView
+    events={events}
+    tasks={tasks}
+    shopping={shopping}
+  />
+)}
         {view === "radar" && <RadarView events={events} tasks={tasks} shopping={shopping} />}
         {view === "familia" && <FamilyView />}
       </main>
@@ -989,7 +1008,15 @@ function WorkScheduleView() {
   );
 }
 
-function ProfileLGPDView() {
+function ProfileLGPDView({
+  events,
+  tasks,
+  shopping,
+}: {
+  events: AgendaEvent[];
+  tasks: AgendaTask[];
+  shopping: ShoppingItem[];
+}) {
   return (
     <div className="max-w-2xl bg-white dark:bg-gray-900 rounded-[2.5rem] p-6 md:p-8 border border-gray-100 dark:border-gray-800 shadow-sm">
       <div className="flex items-center gap-4 mb-6">
@@ -998,16 +1025,30 @@ function ProfileLGPDView() {
         </div>
 
         <div>
-          <h2 className="text-2xl font-bold">LGPD e Privacidade</h2>
-          <p className="text-sm text-gray-500">Seus dados estão seguros</p>
+          <h2 className="text-2xl font-bold">Privacidade e backup</h2>
+          <p className="text-sm text-gray-500">
+            Controle básico dos dados da família
+          </p>
         </div>
       </div>
 
-      <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed p-4 bg-blue-50 dark:bg-blue-900/10 rounded-2xl border border-blue-100 dark:border-blue-900/30">
-        A <strong>Nossa Agenda</strong> não coleta nem processa dados sensíveis. Todas as
-        informações da sua família, equipe e horários são armazenadas e sincronizadas apenas
-        com o seu banco de dados privado.
-      </p>
+      <div className="space-y-4">
+        <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed p-4 bg-blue-50 dark:bg-blue-900/10 rounded-2xl border border-blue-100 dark:border-blue-900/30">
+          A <strong>Agenda FF</strong> guarda compromissos, tarefas e compras da família.
+          Por isso, o acesso deve ficar restrito apenas aos usuários autorizados.
+        </p>
+
+        <button
+          onClick={() => baixarBackupAgendaFF(events, tasks, shopping)}
+          className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 py-3 rounded-2xl font-bold"
+        >
+          Baixar backup da Agenda FF
+        </button>
+
+        <p className="text-xs text-gray-400 leading-relaxed">
+          O backup será salvo como arquivo JSON. Guarde esse arquivo em local seguro.
+        </p>
+      </div>
     </div>
   );
 }

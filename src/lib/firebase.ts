@@ -1,6 +1,19 @@
 import { useState, useEffect } from "react";
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, onSnapshot, setDoc } from "firebase/firestore";
+import {
+  getFirestore,
+  doc,
+  onSnapshot,
+  setDoc,
+} from "firebase/firestore";
+import {
+  getAuth,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+  type User,
+} from "firebase/auth";
+
 import type { AgendaEvent, AgendaTask, ShoppingItem } from "./types";
 
 const firebaseConfig = {
@@ -9,77 +22,170 @@ const firebaseConfig = {
   projectId: "nossa-agenda-286ba",
   storageBucket: "nossa-agenda-286ba.firebasestorage.app",
   messagingSenderId: "647011844033",
-  appId: "1:647011844033:web:443aa4580e0c5d0faff940"
+  appId: "1:647011844033:web:443aa4580e0c5d0faff940",
 };
 
-let db: any = null;
-let familyDocRef: any = null;
+let app: ReturnType<typeof initializeApp> | null = null;
+let db: ReturnType<typeof getFirestore> | null = null;
+let auth: ReturnType<typeof getAuth> | null = null;
 
 try {
-  const app = initializeApp(firebaseConfig);
+  app = initializeApp(firebaseConfig);
   db = getFirestore(app);
-  familyDocRef = doc(db, "banco-de-dados", "nossa-familia");
+  auth = getAuth(app);
 } catch (error) {
-  console.error("A rede bloqueou a ligação ao Firebase inicial:", error);
+  console.error("Falha ao iniciar Firebase:", error);
 }
 
-export function useAgendaSync() {
+function getFamilyDocRef() {
+  if (!db) return null;
+  return doc(db, "banco-de-dados", "nossa-familia");
+}
+
+export function useAuthUser() {
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  useEffect(() => {
+    if (!auth) {
+      setIsAuthLoading(false);
+      return;
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setIsAuthLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  return { user, isAuthLoading };
+}
+
+export async function entrarNaAgenda(email: string, password: string) {
+  if (!auth) {
+    throw new Error("Firebase Auth não foi iniciado.");
+  }
+
+  return signInWithEmailAndPassword(auth, email, password);
+}
+
+export async function sairDaAgenda() {
+  if (!auth) return;
+  await signOut(auth);
+}
+
+export function useAgendaSync(user: User | null) {
   const [events, setEventsState] = useState<AgendaEvent[]>([]);
   const [tasks, setTasksState] = useState<AgendaTask[]>([]);
   const [shopping, setShoppingState] = useState<ShoppingItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!familyDocRef) {
+    const familyDocRef = getFamilyDocRef();
+
+    if (!user || !familyDocRef) {
+      setEventsState([]);
+      setTasksState([]);
+      setShoppingState([]);
       setIsLoading(false);
       return;
     }
 
-    try {
-      const unsubscribe = onSnapshot(familyDocRef, (docSnap: any) => {
+    setIsLoading(true);
+
+    const unsubscribe = onSnapshot(
+      familyDocRef,
+      (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
+
           setEventsState(data.events || []);
           setTasksState(data.tasks || []);
           setShoppingState(data.shopping || []);
         } else {
-           setDoc(familyDocRef, { events: [], tasks: [], shopping: [] });
+          console.error("Documento da família não encontrado no Firestore.");
         }
+
         setIsLoading(false);
-      }, (error: any) => {
-         console.error("Erro de sincronização:", error);
-         setIsLoading(false);
-      });
-      return () => unsubscribe();
-    } catch (err) {
-      console.error("Falha ao escutar a base de dados:", err);
-      setIsLoading(false);
-    }
-  }, []);
+      },
+      (error) => {
+        console.error("Erro de sincronização:", error);
+        setIsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
 
   const setEvents = (action: React.SetStateAction<AgendaEvent[]>) => {
-    setEventsState(prev => {
-      const next = typeof action === 'function' ? (action as any)(prev) : action;
-      if (familyDocRef) setDoc(familyDocRef, { events: next }, { merge: true });
+    setEventsState((prev) => {
+      const next = typeof action === "function" ? (action as any)(prev) : action;
+      const familyDocRef = getFamilyDocRef();
+
+      if (user && familyDocRef) {
+        setDoc(
+          familyDocRef,
+          {
+            events: next,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      }
+
       return next;
     });
   };
 
   const setTasks = (action: React.SetStateAction<AgendaTask[]>) => {
-    setTasksState(prev => {
-      const next = typeof action === 'function' ? (action as any)(prev) : action;
-      if (familyDocRef) setDoc(familyDocRef, { tasks: next }, { merge: true });
+    setTasksState((prev) => {
+      const next = typeof action === "function" ? (action as any)(prev) : action;
+      const familyDocRef = getFamilyDocRef();
+
+      if (user && familyDocRef) {
+        setDoc(
+          familyDocRef,
+          {
+            tasks: next,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      }
+
       return next;
     });
   };
 
   const setShopping = (action: React.SetStateAction<ShoppingItem[]>) => {
-    setShoppingState(prev => {
-      const next = typeof action === 'function' ? (action as any)(prev) : action;
-      if (familyDocRef) setDoc(familyDocRef, { shopping: next }, { merge: true });
+    setShoppingState((prev) => {
+      const next = typeof action === "function" ? (action as any)(prev) : action;
+      const familyDocRef = getFamilyDocRef();
+
+      if (user && familyDocRef) {
+        setDoc(
+          familyDocRef,
+          {
+            shopping: next,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      }
+
       return next;
     });
   };
 
-  return { events, setEvents, tasks, setTasks, shopping, setShopping, isLoading };
+  return {
+    events,
+    setEvents,
+    tasks,
+    setTasks,
+    shopping,
+    setShopping,
+    isLoading,
+  };
 }
