@@ -71,7 +71,7 @@ export async function interpretarEntradaRapidaComIA(input: string): Promise<Pars
   }
 
   try {
-    const resposta = await fetch("/.netlify/functions/interpretar-agenda", {
+    const resposta = await fetch("/api/interpretar-agenda", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

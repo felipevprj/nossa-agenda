@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 
 import { parseEventInput } from "../lib/parser";
+import { corrigirParsedComTextoOriginal } from "../lib/normalize";
 import { uid, nowISO } from "../lib/storage";
 import { PEOPLE } from "../lib/people";
 import { formatBR } from "../lib/radar";
@@ -1183,54 +1184,70 @@ function SmartAudioModal({ onSave, onClose }: any) {
 
   const interpretarTexto = async () => {
     const textoLimpo = text.trim();
-
+  
     if (!textoLimpo) {
       alert("Digite ou fale alguma informação antes de interpretar.");
       return;
     }
-
+  
     setInterpretando(true);
-
+  
     try {
       const resultadoIA = await interpretarEntradaRapidaComIA(textoLimpo);
-
+  
       if (resultadoIA) {
         const textoCorrigido = resultadoIA.data.sourceText || textoLimpo;
-
-        setText(textoCorrigido);
-
-        setParsed({
+  
+        const resultadoBase = {
           ...resultadoIA,
           data: {
             ...resultadoIA.data,
             sourceText: textoCorrigido,
           },
-        } as ParsedResult);
-
+        } as ParsedResult;
+  
+        const resultadoCorrigido = corrigirParsedComTextoOriginal(
+          textoLimpo,
+          resultadoBase
+        );
+  
+        setText(textoCorrigido);
+        setParsed(resultadoCorrigido);
+  
         return;
       }
-
+  
       const resultadoLocal = parseEventInput(textoLimpo);
-
-      setParsed({
-        ...resultadoLocal,
-        data: {
-          ...resultadoLocal.data,
-          sourceText: textoLimpo,
-        },
-      } as ParsedResult);
+  
+      const resultadoCorrigido = corrigirParsedComTextoOriginal(
+        textoLimpo,
+        {
+          ...resultadoLocal,
+          data: {
+            ...resultadoLocal.data,
+            sourceText: textoLimpo,
+          },
+        } as ParsedResult
+      );
+  
+      setParsed(resultadoCorrigido);
     } catch (error) {
       console.error("Erro ao interpretar texto:", error);
-
+  
       const resultadoLocal = parseEventInput(textoLimpo);
-
-      setParsed({
-        ...resultadoLocal,
-        data: {
-          ...resultadoLocal.data,
-          sourceText: textoLimpo,
-        },
-      } as ParsedResult);
+  
+      const resultadoCorrigido = corrigirParsedComTextoOriginal(
+        textoLimpo,
+        {
+          ...resultadoLocal,
+          data: {
+            ...resultadoLocal.data,
+            sourceText: textoLimpo,
+          },
+        } as ParsedResult
+      );
+  
+      setParsed(resultadoCorrigido);
     } finally {
       setInterpretando(false);
     }
